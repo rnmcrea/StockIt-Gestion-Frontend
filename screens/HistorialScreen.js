@@ -308,6 +308,7 @@ export default function HistorialScreen() {
         <TextInput
           style={styles.inputFiltro}
           placeholder="Filtrar por local"
+          placeholderTextColor="#999"
           value={filtroLocal}
           onChangeText={setFiltroLocal}
         />
@@ -315,6 +316,7 @@ export default function HistorialScreen() {
         <TextInput
           style={styles.inputFiltro}
           placeholder="Filtrar por código"
+          placeholderTextColor="#999"
           value={filtroCodigo}
           onChangeText={setFiltroCodigo}
         />
@@ -322,6 +324,7 @@ export default function HistorialScreen() {
         <TextInput
           style={styles.inputFiltro}
           placeholder="Filtrar por tipo (Consumo/Facturable)"
+          placeholderTextColor="#999"
           value={filtroTipoConsumo}
           onChangeText={setFiltroTipoConsumo}
         />

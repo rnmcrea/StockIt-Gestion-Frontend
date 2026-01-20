@@ -36,7 +36,7 @@ const AgregarUsoScreen = () => {
   const [mostrarSugCliente, setMostrarSugCliente] = useState(false);
   const [mostrarSugTipoConsumo, setMostrarSugTipoConsumo] = useState(false); 
 
-  const opcionesMaquina = ['Moneda', 'Billete'];
+  const opcionesMaquina = ['CDS803', 'AST7008'];
   const opcionesCliente = ['Walmart', 'Loomis', 'Monticello', 'Enjoy', 'BCI Talca', 'BCI Arica'];
   const opcionesTipoConsumo = ['Consumo', 'Facturable']; 
 
@@ -418,6 +418,7 @@ const AgregarUsoScreen = () => {
         <View style={[styles.inputContainer, { zIndex: 1000 }]}>
           <TextInput
             placeholder="Código del repuesto"
+            placeholderTextColor="#999"
             style={styles.input}
             value={codigo}
             onChangeText={handleCodigoChange}
@@ -445,6 +446,7 @@ const AgregarUsoScreen = () => {
         <View style={[styles.inputContainer, { zIndex: 900 }]}>
           <TextInput
             placeholder="Cliente"
+            placeholderTextColor="#999"
             style={styles.input}
             value={cliente}
             onChangeText={handleClienteChange}
@@ -472,6 +474,7 @@ const AgregarUsoScreen = () => {
         <View style={[styles.inputContainer, { zIndex: 800 }]}>
           <TextInput
             placeholder="Tipo de máquina"
+            placeholderTextColor="#999"
             style={styles.input}
             value={maquina}
             onChangeText={handleMaquinaChange}
@@ -499,6 +502,7 @@ const AgregarUsoScreen = () => {
         <TextInput
           style={styles.input}
           placeholder="Lugar de uso"
+          placeholderTextColor="#999"
           value={lugarUso}
           onChangeText={setLugarUso}
           onFocus={cerrarTodasLasSugerencias}
@@ -508,6 +512,7 @@ const AgregarUsoScreen = () => {
         <View style={[styles.inputContainer, { zIndex: 700 }]}>
           <TextInput
             placeholder="Tipo de consumo"
+            placeholderTextColor="#999"
             style={styles.input}
             value={tipoConsumo}
             onChangeText={handleTipoConsumoChange}
@@ -535,6 +540,7 @@ const AgregarUsoScreen = () => {
         <TextInput
           style={styles.input}
           placeholder="Cantidad"
+          placeholderTextColor="#999"
           value={cantidad}
           onChangeText={setCantidad}
           keyboardType="numeric"

@@ -1,7 +1,7 @@
 // frontend/config/config.js
 
 const environments = {
-  local: 'http://192.168.1.4:5000',
+  local: 'http://192.168.1.5:5000',
   development: 'https://stockit-i82e.onrender.com',
   production: 'https://stockit-i82e.onrender.com',
 };
@@ -11,6 +11,7 @@ const config = {
   API_URL: (() => {
     // En desarrollo con Expo
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      //return environments.local;
       return environments.development;
     }
     // En builds de producción

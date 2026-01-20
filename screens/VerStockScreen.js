@@ -408,6 +408,7 @@ export default function VerStockScreen() {
         <TextInput
           style={styles.input}
           placeholder="Buscar por código"
+          placeholderTextColor="#999"
           value={busqueda}
           onChangeText={setBusqueda}
         />
@@ -612,6 +613,7 @@ export default function VerStockScreen() {
               <TextInput
                 style={styles.modalInput}
                 placeholder={`Cantidad (máx. ${itemSeleccionado?.cantidad || 0})`}
+                placeholderTextColor="#999"
                 value={cantidadInput}
                 onChangeText={setCantidadInput}
                 keyboardType="numeric"

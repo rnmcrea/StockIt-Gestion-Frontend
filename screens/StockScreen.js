@@ -310,6 +310,7 @@ export default function StockScreen() {
         
         <TextInput
           placeholder={cargandoCodigos ? "Cargando códigos..." : "Código"}
+          placeholderTextColor="#999"
           style={styles.input}
           value={codigo}
           onChangeText={handleCambioCodigo}
@@ -344,6 +345,7 @@ export default function StockScreen() {
 
         <TextInput
           placeholder="Nombre del repuesto"
+          placeholderTextColor="#999"
           style={[
             styles.input, 
             nombreDuplicado && styles.inputError,
@@ -361,6 +363,7 @@ export default function StockScreen() {
 
         <TextInput
           placeholder="Cantidad"
+          placeholderTextColor="#999"
           style={[
             styles.input,
             mostrarSugerencias && styles.inputConSugerencias
