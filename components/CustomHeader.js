@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
   },
   blueRectangle: {
     position: 'absolute',
-    left: 30,
+    left: 29,
     right: 0,
     top: 0,
     bottom: 0,

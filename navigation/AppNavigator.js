@@ -13,6 +13,25 @@ import { AuthContext } from '../context/AuthContext';
 
 const Stack = createNativeStackNavigator();
 
+// Config de linking para que en web el boton "atras" del navegador
+// navegue el stack en vez de cerrar la app (PWA).
+const webOrigin =
+  typeof window !== 'undefined' && window.location ? window.location.origin : null;
+
+const linking = {
+  prefixes: [webOrigin, 'http://localhost:8081'].filter(Boolean),
+  config: {
+    screens: {
+      Login: 'login',
+      Home: '',
+      Stock: 'registrar-repuesto',
+      VerStock: 'ver-stock',
+      AgregarUso: 'registrar-uso',
+      Historial: 'historial',
+    },
+  },
+};
+
 export default function AppNavigator() {
   const { usuario, cargando } = useContext(AuthContext);
 
@@ -27,7 +46,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <Stack.Navigator>
         {usuario ? (
           // Stack para usuarios autenticados

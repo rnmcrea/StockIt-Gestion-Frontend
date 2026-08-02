@@ -204,88 +204,125 @@ export default function StockScreen() {
     return codigoValido || existeEnStock;
   };
 
-  const agregarRepuesto = async () => {
-    // Ocultar teclado inmediatamente al presionar el botón
-    Keyboard.dismiss();
+  // Envía el repuesto al stock personal. Devuelve true si se guardó correctamente.
+  const enviarStockPersonal = async (codigoLimpio, nombreLimpio, cantidadNumerica) => {
+    const payload = {
+      codigo: codigoLimpio,
+      nombre: nombreLimpio,
+      cantidad: cantidadNumerica
+    };
 
-    const codigoLimpio = codigo.trim();
-    const nombreLimpio = nombre.trim();
-    
-    if (!codigoLimpio || !nombreLimpio || !cantidad) {
+    const res = await fetch(getApiUrl('/api/stock/personal'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('Error respuesta agregar:', errorText);
+
+      try {
+        const errorJson = JSON.parse(errorText);
+        showToast(errorJson.message || errorJson.error || 'No se pudo agregar el repuesto', 'error');
+      } catch {
+        showToast(`Error del servidor (${res.status}): ${errorText}`, 'error');
+      }
+      return false;
+    }
+
+    const data = await res.json();
+    showToast(data.operacion === 'suma' ? 'Stock actualizado exitosamente' : 'Repuesto agregado exitosamente');
+
+    // Limpiar formulario y recargar stock
+    setCodigo('');
+    setNombre('');
+    setCantidad('');
+    setNombreBloqueado(false);
+    cargarStockExistente();
+    return true;
+  };
+
+  // Valida los campos comunes. Devuelve la cantidad numérica o null si hay error.
+  const validarCampos = () => {
+    if (!codigo.trim() || !nombre.trim() || !cantidad) {
       showToast('Todos los campos son requeridos', 'error');
-      return;
+      return null;
     }
 
     const cantidadNumerica = Number(cantidad);
     if (isNaN(cantidadNumerica) || cantidadNumerica <= 0) {
       showToast('La cantidad debe ser mayor a 0', 'error');
-      return;
+      return null;
     }
+    return cantidadNumerica;
+  };
+
+  const agregarRepuesto = async () => {
+    // Ocultar teclado inmediatamente al presionar el botón
+    Keyboard.dismiss();
+
+    const cantidadNumerica = validarCampos();
+    if (cantidadNumerica === null) return;
+
+    const codigoLimpio = codigo.trim();
+    const nombreLimpio = nombre.trim();
 
     // Validar que el código existe en la base de datos
     if (!validarCodigo(codigoLimpio)) {
       showToast(
-        'El código ingresado no existe en el catálogo. Verifique el código o contacte al administrador.',
+        'El código ingresado no existe en el catálogo. Usa el botón "+ Crear nuevo repuesto".',
         'error'
       );
       return;
     }
 
-    // No mostrar Alert para suma automática, directamente enviar
-    const payload = { 
-      codigo: codigoLimpio, 
-      nombre: nombreLimpio, 
-      cantidad: cantidadNumerica
-    };
-    
     try {
-      console.log('Enviando repuesto a:', `${config.API_URL}/api/stock/personal`);
-      console.log('Payload:', payload);
-      
-      const res = await fetch(getApiUrl('/api/stock/personal'), {
+      await enviarStockPersonal(codigoLimpio, nombreLimpio, cantidadNumerica);
+    } catch (err) {
+      console.error('Error al agregar repuesto:', err);
+      showToast('Error de conexión. Intente nuevamente.\n\nDetalle: ' + err.message, 'error');
+    }
+  };
+
+  // Crea un código nuevo en el catálogo y lo agrega al stock personal
+  const crearYAgregar = async () => {
+    Keyboard.dismiss();
+
+    const cantidadNumerica = validarCampos();
+    if (cantidadNumerica === null) return;
+
+    const codigoLimpio = codigo.trim();
+    const nombreLimpio = nombre.trim();
+
+    try {
+      // 1. Registrar el código en el catálogo (409 = ya existe, seguimos igual)
+      const resCodigo = await fetch(getApiUrl('/api/codigos'), {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ codigo: codigoLimpio, nombre: nombreLimpio }),
       });
-      
-      console.log('Respuesta agregar status:', res.status);
-      
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('Error respuesta agregar:', errorText);
-        
-        try {
-          const errorJson = JSON.parse(errorText);
-          showToast(errorJson.message || errorJson.error || 'No se pudo agregar el repuesto', 'error');
-        } catch {
-          showToast(`Error del servidor (${res.status}): ${errorText}`, 'error');
-        }
+
+      if (!resCodigo.ok && resCodigo.status !== 409) {
+        const errTxt = await resCodigo.text();
+        console.error('Error creando código en catálogo:', errTxt);
+        showToast('No se pudo crear el repuesto en el catálogo', 'error');
         return;
       }
-      
-      const data = await res.json();
-      console.log('Respuesta exitosa:', data);
-      
-      // Mostrar mensaje apropiado según la operación
-      if (data.operacion === 'suma') {
-        showToast('Stock actualizado exitosamente');
-      } else {
-        showToast('Repuesto agregado exitosamente');
-      }
-      
-      // Limpiar formulario
-      setCodigo('');
-      setNombre('');
-      setCantidad('');
-      setNombreBloqueado(false);
-      
-      // Recargar stock
-      cargarStockExistente();
+
+      // 2. Agregar al stock personal
+      const ok = await enviarStockPersonal(codigoLimpio, nombreLimpio, cantidadNumerica);
+
+      // 3. Refrescar el catálogo para que el código quede disponible
+      if (ok) cargarCodigosDisponibles();
     } catch (err) {
-      console.error('Error al agregar repuesto:', err);
+      console.error('Error al crear y agregar repuesto:', err);
       showToast('Error de conexión. Intente nuevamente.\n\nDetalle: ' + err.message, 'error');
     }
   };
@@ -301,6 +338,17 @@ export default function StockScreen() {
       </SafeAreaView>
     );
   }
+
+  // ¿El código escrito no existe ni en el catálogo ni en el stock? → repuesto nuevo
+  const codigoLimpio = codigo.trim();
+  const codigoEnCatalogo = codigosDisponibles.some(
+    c => c.codigo.toLowerCase() === codigoLimpio.toLowerCase()
+  );
+  const codigoEnStock = stockExistente.some(
+    item => item.codigo.toLowerCase() === codigoLimpio.toLowerCase()
+  );
+  const esCodigoNuevo =
+    codigoLimpio.length > 0 && !codigoEnCatalogo && !codigoEnStock && !mostrarSugerencias;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -373,15 +421,30 @@ export default function StockScreen() {
           keyboardType="numeric"
         />
 
-        <TouchableOpacity 
-          style={[styles.boton, cargandoCodigos && styles.botonDeshabilitado]} 
-          onPress={agregarRepuesto}
-          disabled={cargandoCodigos}
-        >
-          <Text style={styles.textoBoton}>
-            {cargandoCodigos ? 'CARGANDO...' : 'AGREGAR A MI STOCK'}
-          </Text>
-        </TouchableOpacity>
+        {esCodigoNuevo ? (
+          <>
+            <Text style={styles.nuevoInfoText}>
+              Este código no está en el catálogo. Puedes crearlo como repuesto nuevo.
+            </Text>
+            <TouchableOpacity
+              style={[styles.boton, styles.botonNuevo, cargandoCodigos && styles.botonDeshabilitado]}
+              onPress={crearYAgregar}
+              disabled={cargandoCodigos}
+            >
+              <Text style={styles.textoBoton}>＋  CREAR NUEVO REPUESTO</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity
+            style={[styles.boton, cargandoCodigos && styles.botonDeshabilitado]}
+            onPress={agregarRepuesto}
+            disabled={cargandoCodigos}
+          >
+            <Text style={styles.textoBoton}>
+              {cargandoCodigos ? 'CARGANDO...' : 'AGREGAR A MI STOCK'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {codigosDisponibles.length === 0 && !cargandoCodigos && (
           <Text style={styles.infoText}>
@@ -452,8 +515,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 10 
   },
-  botonDeshabilitado: { 
-    backgroundColor: '#ccc' 
+  botonDeshabilitado: {
+    backgroundColor: '#ccc'
+  },
+  botonNuevo: {
+    backgroundColor: '#22C55E',
+  },
+  nuevoInfoText: {
+    color: '#15803D',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 6,
+    marginBottom: 2,
+    fontStyle: 'italic',
   },
   textoBoton: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   sugerenciasContainer: {

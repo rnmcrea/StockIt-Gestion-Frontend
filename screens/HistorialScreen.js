@@ -19,6 +19,21 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import CustomHeader from '../components/CustomHeader';
 import Toast from '../components/Toast';
 import { useToast } from '../hooks/useToast';
+import { Lock, Calendar, Trash2 } from 'lucide-react-native';
+
+// Estilo del <input type="date"> nativo de web (no es un componente RN)
+const estiloInputFechaWeb = {
+  width: '100%',
+  boxSizing: 'border-box',
+  padding: 9,
+  fontSize: 14,
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: '#ccc',
+  borderRadius: 5,
+  backgroundColor: '#fff',
+  color: '#333',
+};
 
 export default function HistorialScreen() {
   const [usos, setUsos] = useState([]);
@@ -35,15 +50,31 @@ export default function HistorialScreen() {
   // Hook para toast
   const { toast, showToast, hideToast } = useToast();
 
-  // Estados para modal de edición
+  // Estados para modal de acciones (editar tipo / eliminar)
   const [modalEditarVisible, setModalEditarVisible] = useState(false);
   const [usoEditando, setUsoEditando] = useState(null);
   const [nuevoTipoConsumo, setNuevoTipoConsumo] = useState('');
+  const [confirmandoEliminar, setConfirmandoEliminar] = useState(false);
 
   // Función para mostrar fecha formateada
   const mostrarFecha = (fecha) => {
     if (!fecha) return null;
     return fecha.toLocaleDateString();
+  };
+
+  // Helpers para el <input type="date"> de web (formato YYYY-MM-DD)
+  const aValorInput = (fecha) => {
+    if (!fecha) return '';
+    const y = fecha.getFullYear();
+    const m = String(fecha.getMonth() + 1).padStart(2, '0');
+    const d = String(fecha.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const desdeValorInput = (valor) => {
+    if (!valor) return null;
+    const [y, m, d] = valor.split('-').map(Number);
+    return new Date(y, m - 1, d);
   };
 
   // Filtros adicionales
@@ -90,11 +121,18 @@ export default function HistorialScreen() {
     cargarUsos();
   }, [usuario, token]);
 
-  // Función para editar tipo de consumo
-  const editarTipoConsumo = (uso) => {
+  // Abrir el modal de acciones (solo para usos no enviados en reporte)
+  const abrirAcciones = (uso) => {
     setUsoEditando(uso);
     setNuevoTipoConsumo(uso.tipoConsumo || 'Consumo');
+    setConfirmandoEliminar(false);
     setModalEditarVisible(true);
+  };
+
+  const cerrarModal = () => {
+    setModalEditarVisible(false);
+    setUsoEditando(null);
+    setConfirmandoEliminar(false);
   };
 
   const confirmarEdicion = async () => {
@@ -104,8 +142,7 @@ export default function HistorialScreen() {
     }
 
     try {
-      //const response = await fetch(`${config.API_URL}/api/usos/${usoEditando._id}/editar-tipo`, {
-        const response = await fetch(getApiUrl(`/api/usos/${usoEditando._id}/editar-tipo`), {
+      const response = await fetch(getApiUrl(`/api/usos/${usoEditando._id}/editar-tipo`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -117,24 +154,50 @@ export default function HistorialScreen() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Error al editar');
       }
 
       const resultado = await response.json();
-      
+
       showToast(`Tipo actualizado de "${resultado.uso.tipoAnterior}" a "${resultado.uso.tipoNuevo}"`);
-      
-      // Recargar la lista de usos
+
+      // Recargar la lista de usos y cerrar modal
       cargarUsos();
-      
-      // Cerrar modal
-      setModalEditarVisible(false);
-      setUsoEditando(null);
+      cerrarModal();
 
     } catch (error) {
       console.error('Error al editar tipo de consumo:', error);
-      showToast('Error al editar tipo de consumo', 'error');
+      showToast(error.message || 'Error al editar tipo de consumo', 'error');
+    }
+  };
+
+  // Eliminar el uso y devolver la cantidad al stock personal
+  const eliminarUso = async () => {
+    if (!usoEditando) return;
+
+    try {
+      const response = await fetch(getApiUrl(`/api/usos/${usoEditando._id}`), {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data.error || 'No se pudo eliminar el uso');
+      }
+
+      showToast('Uso eliminado y devuelto a tu stock');
+      cargarUsos();
+      cerrarModal();
+
+    } catch (error) {
+      console.error('Error al eliminar uso:', error);
+      showToast(error.message || 'Error al eliminar el uso', 'error');
     }
   };
 
@@ -266,12 +329,18 @@ export default function HistorialScreen() {
     <View style={styles.item}>
       <View style={styles.headerItem}>
         <Text style={styles.titulo}>{item.codigo || 'Sin código'}</Text>
-        <TouchableOpacity 
-            style={styles.botonMenu}
-            onPress={() => editarTipoConsumo(item)}
-        >
-            <Text style={styles.textoMenu}>⋮</Text>
-        </TouchableOpacity>
+        {item.enviadoManual ? (
+          <View style={styles.candado}>
+            <Lock size={16} color="#4CAF50" />
+          </View>
+        ) : (
+          <TouchableOpacity
+              style={styles.botonMenu}
+              onPress={() => abrirAcciones(item)}
+          >
+              <Text style={styles.textoMenu}>⋮</Text>
+          </TouchableOpacity>
+        )}
       </View>
       <Text style={styles.nombre}>Nombre: {item.nombre || 'Sin nombre'}</Text>
       <Text>Cliente: {item.cliente || 'N/A'}</Text>
@@ -329,19 +398,53 @@ export default function HistorialScreen() {
           onChangeText={setFiltroTipoConsumo}
         />
 
-        {/* Filtros de fechas */}
-        <View style={styles.fechas}>
-          <Pressable onPress={() => setMostrarInicio(true)} style={styles.fechaBtn}>
-            <Text style={styles.fechaTexto}>
-            📅 Desde: {mostrarFecha(fechaInicio) || 'Seleccione'}
-            </Text>
-          </Pressable>
-          <Pressable onPress={() => setMostrarFin(true)} style={styles.fechaBtn}>
-            <Text style={styles.fechaTexto}>
-            📅 Hasta: {mostrarFecha(fechaFin) || 'Seleccione'}
-            </Text>
-          </Pressable>
-        </View>
+        {/* Filtros de fechas: en web usamos <input type="date"> nativo del navegador
+            porque DateTimePicker no funciona en la PWA */}
+        {Platform.OS === 'web' ? (
+          <View style={styles.fechas}>
+            <View style={styles.fechaCampo}>
+              <View style={styles.fechaLabelRow}>
+                <Calendar size={13} color="#555" />
+                <Text style={styles.fechaLabel}>Desde</Text>
+              </View>
+              <input
+                type="date"
+                value={aValorInput(fechaInicio)}
+                max={aValorInput(fechaFin) || undefined}
+                onChange={(e) => setFechaInicio(desdeValorInput(e.target.value))}
+                style={estiloInputFechaWeb}
+              />
+            </View>
+            <View style={styles.fechaCampo}>
+              <View style={styles.fechaLabelRow}>
+                <Calendar size={13} color="#555" />
+                <Text style={styles.fechaLabel}>Hasta</Text>
+              </View>
+              <input
+                type="date"
+                value={aValorInput(fechaFin)}
+                min={aValorInput(fechaInicio) || undefined}
+                onChange={(e) => setFechaFin(desdeValorInput(e.target.value))}
+                style={estiloInputFechaWeb}
+              />
+            </View>
+          </View>
+        ) : (
+          <View style={styles.fechas}>
+            <Pressable onPress={() => setMostrarInicio(true)} style={styles.fechaBtn}>
+              <View style={styles.fechaBtnRow}>
+                <Calendar size={14} color="#333" />
+                <Text style={styles.fechaTexto}>Desde: {mostrarFecha(fechaInicio) || 'Seleccione'}</Text>
+              </View>
+            </Pressable>
+            <Pressable onPress={() => setMostrarFin(true)} style={styles.fechaBtn}>
+              <View style={styles.fechaBtnRow}>
+                <Calendar size={14} color="#333" />
+                <Text style={styles.fechaTexto}>Hasta: {mostrarFecha(fechaFin) || 'Seleccione'}</Text>
+              </View>
+            </Pressable>
+          </View>
+        )}
 
         <View style={styles.botonesContainer}>
           <TouchableOpacity style={styles.botonFiltrar} onPress={aplicarFiltro}>
@@ -393,49 +496,82 @@ export default function HistorialScreen() {
           <Text style={styles.textoBoton}>ENVIAR REPORTE</Text>
         </TouchableOpacity>
 
-        {/* Modal para editar tipo de consumo */}
+        {/* Modal de acciones: cambiar tipo o eliminar (solo usos no enviados) */}
         <Modal
           animationType="fade"
           transparent={true}
           visible={modalEditarVisible}
-          onRequestClose={() => setModalEditarVisible(false)}
+          onRequestClose={cerrarModal}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Editar Tipo de Consumo</Text>
-              <Text style={styles.modalSubtitle}>
-                {usoEditando?.codigo}
-              </Text>
-              
-              <TouchableOpacity 
-                style={[styles.modalButton, nuevoTipoConsumo === 'Consumo' && styles.modalButtonSelected]}
-                onPress={() => setNuevoTipoConsumo('Consumo')}
-              >
-                <Text style={[styles.modalButtonText, nuevoTipoConsumo === 'Consumo' ? styles.textSelected : styles.textUnselected]}>CONSUMO</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.modalButton, nuevoTipoConsumo === 'Facturable' && styles.modalButtonSelected]}
-                onPress={() => setNuevoTipoConsumo('Facturable')}
-              >
-                <Text style={[styles.modalButtonText, nuevoTipoConsumo === 'Facturable' ? styles.textSelected : styles.textUnselected]}>FACTURABLE</Text>
-              </TouchableOpacity>
-              
-              <View style={styles.modalButtonsRow}>
-                <TouchableOpacity 
-                  style={[styles.modalButton, styles.modalButtonCancel]}
-                  onPress={() => setModalEditarVisible(false)}
-                >
-                  <Text style={styles.modalButtonTextCancel}>CANCELAR</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.modalButton, styles.modalButtonConfirm]}
-                  onPress={confirmarEdicion}
-                >
-                  <Text style={styles.modalButtonText}>GUARDAR</Text>
-                </TouchableOpacity>
-              </View>
+              {!confirmandoEliminar ? (
+                <>
+                  <Text style={styles.modalTitle}>Acciones</Text>
+                  <Text style={styles.modalSubtitle}>
+                    {usoEditando?.codigo}
+                  </Text>
+
+                  <Text style={styles.modalSectionLabel}>Tipo de consumo</Text>
+                  <TouchableOpacity
+                    style={[styles.modalButton, nuevoTipoConsumo === 'Consumo' && styles.modalButtonSelected]}
+                    onPress={() => setNuevoTipoConsumo('Consumo')}
+                  >
+                    <Text style={[styles.modalButtonText, nuevoTipoConsumo === 'Consumo' ? styles.textSelected : styles.textUnselected]}>CONSUMO</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modalButton, nuevoTipoConsumo === 'Facturable' && styles.modalButtonSelected]}
+                    onPress={() => setNuevoTipoConsumo('Facturable')}
+                  >
+                    <Text style={[styles.modalButtonText, nuevoTipoConsumo === 'Facturable' ? styles.textSelected : styles.textUnselected]}>FACTURABLE</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.modalButtonConfirmFull]}
+                    onPress={confirmarEdicion}
+                  >
+                    <Text style={styles.modalButtonText}>GUARDAR TIPO</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.modalDivider} />
+
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.modalButtonDanger, styles.modalButtonRow]}
+                    onPress={() => setConfirmandoEliminar(true)}
+                  >
+                    <Trash2 size={16} color="#fff" />
+                    <Text style={styles.modalButtonText}>ELIMINAR Y DEVOLVER AL STOCK</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.modalCancelLink} onPress={cerrarModal}>
+                    <Text style={styles.modalCancelLinkText}>Cerrar</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.modalTitle}>¿Eliminar este uso?</Text>
+                  <Text style={styles.modalConfirmText}>
+                    Se devolverán {usoEditando?.cantidad} unidad(es) de {usoEditando?.codigo} a tu stock personal.
+                  </Text>
+
+                  <View style={styles.modalButtonsRow}>
+                    <TouchableOpacity
+                      style={[styles.modalButton, styles.modalButtonCancel]}
+                      onPress={() => setConfirmandoEliminar(false)}
+                    >
+                      <Text style={styles.modalButtonTextCancel}>CANCELAR</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.modalButton, styles.modalButtonDanger, styles.modalButtonDangerConfirm]}
+                      onPress={eliminarUso}
+                    >
+                      <Text style={styles.modalButtonText}>ELIMINAR</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </View>
           </View>
         </Modal>
@@ -499,6 +635,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     color: '#666',
   },
+  candado: {
+    fontSize: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   nombre: {
     fontSize: 14,
     marginBottom: 3,
@@ -528,6 +669,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 10,
+  },
+  fechaCampo: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  fechaLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  fechaLabel: {
+    fontSize: 12,
+    color: '#555',
+    fontWeight: '600',
+  },
+  fechaBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
   fechaBtn: {
     flex: 1,
@@ -711,5 +873,52 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  modalSectionLabel: {
+    fontSize: 13,
+    color: '#888',
+    fontWeight: '600',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  modalButtonConfirmFull: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: '#eee',
+    marginVertical: 14,
+  },
+  modalButtonDanger: {
+    backgroundColor: '#E53935',
+    borderColor: '#E53935',
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  modalButtonDangerConfirm: {
+    flex: 1,
+    marginLeft: 10,
+    marginBottom: 0,
+  },
+  modalCancelLink: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  modalCancelLinkText: {
+    color: '#888',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalConfirmText: {
+    fontSize: 15,
+    textAlign: 'center',
+    color: '#444',
+    marginBottom: 20,
+    lineHeight: 22,
   },
 });

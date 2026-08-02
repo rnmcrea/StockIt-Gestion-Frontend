@@ -13,6 +13,21 @@ import CustomHeader from '../components/CustomHeader';
 import Toast from '../components/Toast';
 import { useToast } from '../hooks/useToast';
 import { Ionicons } from '@expo/vector-icons';
+import { Calendar, Trash2 } from 'lucide-react-native';
+
+// Estilo del <input type="date"> nativo de web (no es un componente RN)
+const estiloInputFechaWeb = {
+  width: '100%',
+  boxSizing: 'border-box',
+  padding: 9,
+  fontSize: 14,
+  borderWidth: 1,
+  borderStyle: 'solid',
+  borderColor: '#ccc',
+  borderRadius: 5,
+  backgroundColor: '#fff',
+  color: '#333',
+};
 
 export default function VerStockScreen() {
   const [stock, setStock] = useState([]);
@@ -31,6 +46,9 @@ export default function VerStockScreen() {
   const [cantidadInput, setCantidadInput] = useState('');
   const [itemSeleccionado, setItemSeleccionado] = useState(null);
   const [usuarioDestino, setUsuarioDestino] = useState('');
+
+  // Cantidad a eliminar (modal de eliminación)
+  const [cantidadEliminar, setCantidadEliminar] = useState('');
   
   // Estados para modales personalizados
   const [modalMenuVisible, setModalMenuVisible] = useState(false);
@@ -45,6 +63,21 @@ export default function VerStockScreen() {
   const { usuario, token } = useContext(AuthContext);
 
   const mostrarFecha = (fecha) => fecha ? fecha.toLocaleDateString() : null;
+
+  // Helpers para el <input type="date"> de web (formato YYYY-MM-DD)
+  const aValorInput = (fecha) => {
+    if (!fecha) return '';
+    const y = fecha.getFullYear();
+    const m = String(fecha.getMonth() + 1).padStart(2, '0');
+    const d = String(fecha.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const desdeValorInput = (valor) => {
+    if (!valor) return null;
+    const [y, m, d] = valor.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  };
 
   // Cargar usuarios desde MongoDB
   const cargarUsuarios = async () => {
@@ -153,8 +186,8 @@ export default function VerStockScreen() {
     showToast('Filtros limpiados');
   };
 
-  // Eliminar repuesto con mejor manejo
-  const eliminarRepuesto = async (id) => {
+  // Eliminar repuesto (cantidad opcional; por defecto 1)
+  const eliminarRepuesto = async (id, cantidad = 1) => {
     Keyboard.dismiss();
 
     try {
@@ -164,15 +197,15 @@ export default function VerStockScreen() {
         return;
       }
 
-      console.log('Eliminando repuesto:', id, 'cantidad actual:', item.cantidad);
+      console.log('Eliminando repuesto:', id, 'cantidad a quitar:', cantidad, 'de', item.cantidad);
 
-      //const res = await fetch(`${config.API_URL}/api/stock/${id}/remove`, {
       const res = await fetch(getApiUrl(`/api/stock/${id}/remove`), {
         method: 'PUT',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        body: JSON.stringify({ cantidad })
       });
 
       console.log('Respuesta eliminar status:', res.status);
@@ -362,13 +395,33 @@ export default function VerStockScreen() {
   // Abrir modal de confirmación de eliminación
   const abrirModalEliminar = () => {
     setModalMenuVisible(false);
+    setCantidadEliminar('');
     setModalEliminarVisible(true);
   };
 
-  // Confirmar eliminación
+  // Confirmar eliminación (permite elegir cuántas unidades quitar)
   const confirmarEliminacion = () => {
+    Keyboard.dismiss();
+
+    const disponible = itemSeleccionado?.cantidad || 0;
+
+    // Si solo hay 1, se elimina directo
+    let aEliminar = 1;
+
+    if (disponible > 1) {
+      aEliminar = parseInt(cantidadEliminar);
+      if (isNaN(aEliminar) || aEliminar <= 0) {
+        showToast('✘ Ingrese una cantidad válida', 'error');
+        return;
+      }
+      if (aEliminar > disponible) {
+        showToast(`✘ Cantidad máxima disponible: ${disponible}`, 'error');
+        return;
+      }
+    }
+
     setModalEliminarVisible(false);
-    eliminarRepuesto(itemSeleccionado._id);
+    eliminarRepuesto(itemSeleccionado._id, aEliminar);
   };
 
   const renderItem = ({ item }) => (
@@ -413,14 +466,53 @@ export default function VerStockScreen() {
           onChangeText={setBusqueda}
         />
 
-        <View style={styles.fechas}>
-          <Pressable onPress={() => setMostrarInicio(true)} style={styles.fechaBtn}>
-            <Text style={styles.fechaTexto}>📅 Desde: {mostrarFecha(fechaInicio) || 'Seleccione'}</Text>
-          </Pressable>
-          <Pressable onPress={() => setMostrarFin(true)} style={styles.fechaBtn}>
-            <Text style={styles.fechaTexto}>📅 Hasta: {mostrarFecha(fechaFin) || 'Seleccione'}</Text>
-          </Pressable>
-        </View>
+        {/* Filtros de fechas: en web usamos <input type="date"> nativo del navegador
+            porque DateTimePicker no funciona en la PWA */}
+        {Platform.OS === 'web' ? (
+          <View style={styles.fechas}>
+            <View style={styles.fechaCampo}>
+              <View style={styles.fechaLabelRow}>
+                <Calendar size={13} color="#555" />
+                <Text style={styles.fechaLabel}>Desde</Text>
+              </View>
+              <input
+                type="date"
+                value={aValorInput(fechaInicio)}
+                max={aValorInput(fechaFin) || undefined}
+                onChange={(e) => setFechaInicio(desdeValorInput(e.target.value))}
+                style={estiloInputFechaWeb}
+              />
+            </View>
+            <View style={styles.fechaCampo}>
+              <View style={styles.fechaLabelRow}>
+                <Calendar size={13} color="#555" />
+                <Text style={styles.fechaLabel}>Hasta</Text>
+              </View>
+              <input
+                type="date"
+                value={aValorInput(fechaFin)}
+                min={aValorInput(fechaInicio) || undefined}
+                onChange={(e) => setFechaFin(desdeValorInput(e.target.value))}
+                style={estiloInputFechaWeb}
+              />
+            </View>
+          </View>
+        ) : (
+          <View style={styles.fechas}>
+            <Pressable onPress={() => setMostrarInicio(true)} style={styles.fechaBtn}>
+              <View style={styles.fechaBtnRow}>
+                <Calendar size={14} color="#333" />
+                <Text style={styles.fechaTexto}>Desde: {mostrarFecha(fechaInicio) || 'Seleccione'}</Text>
+              </View>
+            </Pressable>
+            <Pressable onPress={() => setMostrarFin(true)} style={styles.fechaBtn}>
+              <View style={styles.fechaBtnRow}>
+                <Calendar size={14} color="#333" />
+                <Text style={styles.fechaTexto}>Hasta: {mostrarFecha(fechaFin) || 'Seleccione'}</Text>
+              </View>
+            </Pressable>
+          </View>
+        )}
 
         <View style={styles.botonesContainer}>
           <TouchableOpacity style={styles.botonFiltrar} onPress={aplicarFiltros}>
@@ -477,10 +569,11 @@ export default function VerStockScreen() {
                 <Text style={styles.modalButtonText}>TRANSFERIR</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.modalButtonDelete]}
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonDelete, styles.modalButtonRow]}
                 onPress={abrirModalEliminar}
               >
+                <Trash2 size={16} color="#fff" />
                 <Text style={styles.modalButtonText}>ELIMINAR</Text>
               </TouchableOpacity>
               
@@ -560,30 +653,49 @@ export default function VerStockScreen() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Confirmar eliminación</Text>
+              <Text style={styles.modalTitle}>Eliminar repuesto</Text>
               <Text style={styles.modalSubtitle}>
                 {itemSeleccionado?.codigo}
               </Text>
               <Text style={styles.modalLabel}>
-                ¿Estás seguro de que deseas eliminar este repuesto?
-              </Text>
-              <Text style={styles.modalLabel}>
                 Cantidad actual: {itemSeleccionado?.cantidad}
               </Text>
-              
+
+              {itemSeleccionado?.cantidad > 1 ? (
+                <>
+                  <Text style={styles.modalLabel}>
+                    ¿Cuántas unidades deseas eliminar?
+                  </Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder={`Cantidad (máx. ${itemSeleccionado?.cantidad || 0})`}
+                    placeholderTextColor="#999"
+                    value={cantidadEliminar}
+                    onChangeText={setCantidadEliminar}
+                    keyboardType="numeric"
+                    autoFocus={true}
+                    selectTextOnFocus={true}
+                  />
+                </>
+              ) : (
+                <Text style={styles.modalLabel}>
+                  ¿Estás seguro de que deseas eliminar este repuesto?
+                </Text>
+              )}
+
               <View style={styles.modalButtonsRow}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonCancel, { flex: 1, marginRight: 10 }]}
                   onPress={() => setModalEliminarVisible(false)}
                 >
-                  <Text style={styles.modalButtonTextCancel}>NO</Text>
+                  <Text style={styles.modalButtonTextCancel}>CANCELAR</Text>
                 </TouchableOpacity>
-                
-                <TouchableOpacity 
+
+                <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonDelete, { flex: 1, marginLeft: 10 }]}
                   onPress={confirmarEliminacion}
                 >
-                  <Text style={styles.modalButtonText}>SI</Text>
+                  <Text style={styles.modalButtonText}>ELIMINAR</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -661,7 +773,11 @@ const styles = StyleSheet.create({
   titulo: { fontSize: 22, fontWeight: 'bold', marginBottom: 15 },
   input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 10, borderRadius: 5, backgroundColor: '#fff' },
   fechas: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  fechaCampo: { flex: 1, marginHorizontal: 5 },
+  fechaLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
+  fechaLabel: { fontSize: 12, color: '#555', fontWeight: '600' },
   fechaBtn: { flex: 1, padding: 10, backgroundColor: '#fff', borderRadius: 5, marginHorizontal: 5, justifyContent: 'center' },
+  fechaBtnRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   fechaTexto: { textAlign: 'center', flexWrap: 'nowrap', fontSize: 12 },
   botonesContainer: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: 15 },
   botonFiltrar: { flex: 1, backgroundColor: '#60A5FA', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
@@ -762,6 +878,12 @@ const styles = StyleSheet.create({
   },
   modalButtonDelete: {
     backgroundColor: '#f44336',
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   modalButtonUser: {
     backgroundColor: '#4CAF50',
