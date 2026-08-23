@@ -9,6 +9,10 @@ import HistorialScreen from '../screens/HistorialScreen';
 import LoginScreen from '../screens/LoginScreen';
 import StockScreen from '../screens/StockScreen';
 import VerStockScreen from '../screens/VerStockScreen';
+import AdminHomeScreen from '../screens/AdminHomeScreen';
+import AdminUsosScreen from '../screens/AdminUsosScreen';
+import AdminResumenScreen from '../screens/AdminResumenScreen';
+import AdminStockScreen from '../screens/AdminStockScreen';
 import { AuthContext } from '../context/AuthContext';
 
 const Stack = createNativeStackNavigator();
@@ -28,6 +32,11 @@ const linking = {
       VerStock: 'ver-stock',
       AgregarUso: 'registrar-uso',
       Historial: 'historial',
+      // Supervisor
+      AdminHome: '',
+      AdminUsos: 'admin/usos',
+      AdminResumen: 'admin/resumen',
+      AdminStock: 'admin/stock',
     },
   },
 };
@@ -48,13 +57,37 @@ export default function AppNavigator() {
   return (
     <NavigationContainer linking={linking}>
       <Stack.Navigator>
-        {usuario ? (
+        {usuario && usuario.rol === 'admin' ? (
+          // Stack para supervisor (solo lectura)
+          <>
+            <Stack.Screen
+              name="AdminHome"
+              component={AdminHomeScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="AdminUsos"
+              component={AdminUsosScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="AdminResumen"
+              component={AdminResumenScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="AdminStock"
+              component={AdminStockScreen}
+              options={{ headerShown: false }}
+            />
+          </>
+        ) : usuario ? (
           // Stack para usuarios autenticados
           <>
-            <Stack.Screen 
-              name="Home" 
-              component={HomeScreen} 
-              options={{ headerShown: false }} 
+            <Stack.Screen
+              name="Home"
+              component={HomeScreen}
+              options={{ headerShown: false }}
             />
             <Stack.Screen 
               name="AgregarUso" 
